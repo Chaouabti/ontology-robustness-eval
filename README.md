@@ -141,7 +141,8 @@ scikit-learn
 jupyterlab
 ipykernel
 ```
-
+<!--
 ## Author
 
 [Chaouabti](https://github.com/Chaouabti)
+-->
