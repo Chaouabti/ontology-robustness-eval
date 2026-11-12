@@ -202,12 +202,5 @@ scikit-learn
 jupyterlab
 ipykernel
 ```
-<!--
 ## Author
-
-<<<<<<< HEAD
 [Chaouabti](https://github.com/Chaouabti)
--->
-=======
-[Chaouabti](https://github.com/Chaouabti)
->>>>>>> 952b69e (Make the report self-explanatory, fix the IoU distribution, sync notebook and script)
