@@ -1,40 +1,21 @@
-"""
-evaluate_ontology.py
---------------------
-Script for evaluating the robustness of a computer vision ontology
-by computing inter-annotator agreement metrics.
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.19.6
+#   kernelspec:
+#     display_name: eval_ontology
+#     language: python
+#     name: eval_ontology
+# ---
 
-Usage
------
-    # Minimal (no output saved)
-    python evaluate_ontology.py --eval_folder /path/to/data
-
-    # Full
-    python evaluate_ontology.py --eval_folder /path/to/data \
-                                 --output_folder /path/to/output \
-                                 --iou_threshold 0.5 \
-                                 --kappa_threshold 0.6
-
-Expected folder structure
--------------------------
-    data/
-    ├── annotator_1/
-    │   ├── labels.txt
-    │   └── labels/
-    │       ├── image1.txt
-    │       └── ...
-    ├── annotator_2/
-    │   ├── labels.txt
-    │   └── labels/
-    │       ├── image1.txt
-    │       └── ...
-    └── ...
-"""
-
-import argparse
+# %%
 from pathlib import Path
 from itertools import combinations
-
 import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
@@ -43,10 +24,12 @@ from sklearn import metrics
 import matplotlib.pyplot as plt
 
 
-# ============================================================
-# 1. LOADING & SETUP
-# ============================================================
+# %% [markdown]
+# # ============================================================
+# # 1. CHARGEMENT & SETUP
+# # ============================================================
 
+# %%
 def scan_eval_folder(eval_folder: str) -> dict:
     """
     Scans the eval_ontologie folder and returns the structure of annotator folders.
@@ -84,18 +67,22 @@ def scan_eval_folder(eval_folder: str) -> dict:
     return result
 
 
-def get_labels(labels_file) -> dict:
+# %%
+def get_labels(labels_file):
     """
-    Reads a labels.txt file and returns a dict mapping class IDs to class names.
+    This functions checks if the file 'labels.txt' exists. 
+    If not, it generated a .txt file with the generic names for each existing class "class1" to "classN". 
+    The users can then change the names later.
+    
+    **Beware: if defined classes have not been used in the training dataset, they will not appear in this labels.txt file.**
 
-    Parameters
-    ----------
-    labels_file : str or Path
-        Path to the labels.txt file.
-
-    Returns
-    -------
-    dict : {class_id_str: class_name}
+    :param labels_file: 
+        - Type: str
+        - Description: The path to the 'labels.txt' file which contains the class IDs and corresponding class names.
+    
+    :return: 
+        - Type: dict
+        - Description: A dictionary where keys are class IDs (as strings) and values are class names.    
     """
     labels_dict = {}
     with open(labels_file, 'r') as labels:
@@ -104,9 +91,11 @@ def get_labels(labels_file) -> dict:
             key = key.strip("'")
             value = value.strip("'\n")
             labels_dict[key] = value
+    
     return labels_dict
 
 
+# %%
 def load_annotator_data(all_data: dict) -> dict:
     """
     Loads annotations and class mappings for all annotators.
@@ -156,6 +145,7 @@ def load_annotator_data(all_data: dict) -> dict:
     return result
 
 
+# %%
 def harmonize_labels(all_data: dict) -> dict:
     """
     Builds a global class mapping across all annotators.
@@ -188,6 +178,8 @@ def harmonize_labels(all_data: dict) -> dict:
     return mapping
 
 
+
+# %%
 def get_common_files(all_data: dict) -> dict:
     """
     Returns the stems of images annotated by at least two annotators.
@@ -227,11 +219,13 @@ def get_common_files(all_data: dict) -> dict:
     return common_files
 
 
-# ============================================================
-# 2. MATCHING & METRICS
-# ============================================================
+# %% [markdown]
+# # ============================================================
+# # 2. MATCHING & MÉTRIQUES
+# # ============================================================
 
-def calculate_iou(box1: list, box2: list) -> float:
+# %%
+def calculate_iou(box1:list, box2:list) -> float:
     """
     Calculates the Intersection over Union (IoU) between two bounding boxes
     in YOLO normalized format.
@@ -252,36 +246,38 @@ def calculate_iou(box1: list, box2: list) -> float:
     float : IoU value between 0 and 1.
         0 indicates no overlap, 1 indicates perfect overlap.
     """
-    # Convert coordinates (x, y, w, h) to (x_min, y_min, x_max, y_max)
+    
+    # Convert coordinates (x, y, w, h) in (x_min, y_min, x_max, y_max)
     box1_x_min = box1[1] - box1[3] / 2
     box1_y_min = box1[2] - box1[4] / 2
     box1_x_max = box1[1] + box1[3] / 2
     box1_y_max = box1[2] + box1[4] / 2
-
+    
     box2_x_min = box2[1] - box2[3] / 2
     box2_y_min = box2[2] - box2[4] / 2
     box2_x_max = box2[1] + box2[3] / 2
     box2_y_max = box2[2] + box2[4] / 2
-
-    # Calculate coordinates of the overlap
+    
+    # Calculate coordinates (x,y) of the overlap
     x_min = max(box1_x_min, box2_x_min)
     y_min = max(box1_y_min, box2_y_min)
     x_max = min(box1_x_max, box2_x_max)
     y_max = min(box1_y_max, box2_y_max)
-
+    
     # Calculate the area of the overlap
     intersection_area = max(0, x_max - x_min) * max(0, y_max - y_min)
 
-    # Calculate the area of the two bounding boxes
+    # Calculer the area of the two bounding boxes
     box1_area = (box1_x_max - box1_x_min) * (box1_y_max - box1_y_min)
     box2_area = (box2_x_max - box2_x_min) * (box2_y_max - box2_y_min)
-
+    
     # Calculate the Intersection over Union (IoU)
     iou = intersection_area / float(box1_area + box2_area - intersection_area)
-
+    
     return iou
 
 
+# %%
 def get_hungarian_matches(boxes_a: list, boxes_b: list, iou_threshold: float = 0.5) -> dict:
     """
     Finds the optimal 1-to-1 matching between two sets of bounding boxes
@@ -345,6 +341,7 @@ def get_hungarian_matches(boxes_a: list, boxes_b: list, iou_threshold: float = 0
     }
 
 
+# %%
 def compute_pair_metrics(all_data: dict, mapping: dict, common_files: dict,
                          ann_a: str, ann_b: str, iou_threshold: float = 0.5) -> dict:
     """
@@ -375,40 +372,41 @@ def compute_pair_metrics(all_data: dict, mapping: dict, common_files: dict,
         'per_file_iou': {stem: float}
     }
     """
-    # Retrieve annotations for each annotator
-    annotations_a, _ = all_data[ann_a]
-    annotations_b, _ = all_data[ann_b]
+    # Récupérer les annotations de chaque annotateur
+    annotations_a, labels_a = all_data[ann_a]
+    annotations_b, labels_b = all_data[ann_b]
 
-    # Build inverted mapping {class_id_int: class_name} for each annotator
+    # Construire le mapping inversé {class_id_int: class_name} pour chaque annotateur
+    # car les annotations stockent des IDs, pas des noms
     id_to_name_a = {mapping[k][ann_a]: k for k in mapping if ann_a in mapping[k]}
     id_to_name_b = {mapping[k][ann_b]: k for k in mapping if ann_b in mapping[k]}
 
-    all_iou = []          # all IoU values of matched boxes
-    all_classes_a = []    # classes of ann_a for Kappa (matched + unmatched)
-    all_classes_b = []    # classes of ann_b for Kappa
-    per_file_iou = {}     # mean IoU per image
+    all_iou = []          # tous les IoU des boxes matchées
+    all_classes_a = []    # classes de ann_a pour le Kappa (boxes matchées + non matchées)
+    all_classes_b = []    # classes de ann_b pour le Kappa
+    per_file_iou = {}     # IoU moyen par image
 
     for stem, annotators in common_files.items():
-        # Only process images annotated by both
+        # Ne traiter que les images annotées par les deux
         if ann_a not in annotators or ann_b not in annotators:
             continue
 
         boxes_a = annotations_a.get(stem, [])
         boxes_b = annotations_b.get(stem, [])
 
-        # Optimal 1-to-1 matching
+        # Matching optimal 1-to-1
         result = get_hungarian_matches(boxes_a, boxes_b, iou_threshold)
 
-        # Collect IoU and class pairs for matched boxes
+        # Collecter les IoU et les paires de classes pour les matches
         file_ious = []
         for box_a, box_b, iou in result['matched']:
             all_iou.append(iou)
             file_ious.append(iou)
-            # Convert IDs to class names
+            # Convertir les IDs en noms de classes
             all_classes_a.append(id_to_name_a.get(box_a[0], 'unknown'))
             all_classes_b.append(id_to_name_b.get(box_b[0], 'unknown'))
 
-        # Unmatched boxes → total disagreement, 'unmatched' class for Kappa
+        # Boxes non matchées → désaccord total, classe 'unmatched' pour le Kappa
         for box_a in result['unmatched_a']:
             all_classes_a.append(id_to_name_a.get(box_a[0], 'unknown'))
             all_classes_b.append('unmatched')
@@ -419,27 +417,28 @@ def compute_pair_metrics(all_data: dict, mapping: dict, common_files: dict,
 
         per_file_iou[stem] = np.mean(file_ious) if file_ious else 0.0
 
-    # Global metrics
+    # Calcul des métriques globales
     mean_iou = np.mean(all_iou) if all_iou else 0.0
 
-    # Agreement rate : proportion of matched boxes with IoU >= threshold AND same class
+    # Agreement rate : proportion de boxes matchées avec IoU >= threshold ET même classe
     agreements = sum(1 for a, b in zip(all_classes_a, all_classes_b) if a == b and a != 'unmatched')
     total = len(all_classes_a)
     agreement_rate = agreements / total if total > 0 else 0.0
 
-    # Global Kappa
+    # Kappa global
     kappa = cohen_kappa_score(all_classes_a, all_classes_b) if len(set(all_classes_a)) > 1 else 1.0
 
-    # Per-class Kappa : binarize for each class
+    # Kappa par classe : on isole les paires où au moins un des deux a annoté cette classe
     per_class_kappa = {}
     all_class_names = set(all_classes_a + all_classes_b) - {'unmatched'}
     for class_name in all_class_names:
+        # Binariser : 1 si l'annotateur a mis cette classe, 0 sinon
         binary_a = [1 if c == class_name else 0 for c in all_classes_a]
         binary_b = [1 if c == class_name else 0 for c in all_classes_b]
         if len(set(binary_a)) > 1 or len(set(binary_b)) > 1:
             per_class_kappa[class_name] = cohen_kappa_score(binary_a, binary_b)
         else:
-            # Both always agree → kappa = 1
+            # Tous les deux toujours d'accord → kappa = 1
             per_class_kappa[class_name] = 1.0
 
     return {
@@ -451,10 +450,12 @@ def compute_pair_metrics(all_data: dict, mapping: dict, common_files: dict,
     }
 
 
-# ============================================================
-# 3. MATRICES & VISUALIZATIONS
-# ============================================================
+# %% [markdown]
+# # ============================================================
+# # 3. MATRICES & VISUALISATIONS
+# # ============================================================
 
+# %%
 def build_annotator_matrix(all_pair_metrics: dict, annotators: list, metric: str) -> pd.DataFrame:
     """
     Builds a symmetric NxN matrix for a given metric across all annotator pairs.
@@ -462,7 +463,7 @@ def build_annotator_matrix(all_pair_metrics: dict, annotators: list, metric: str
     Parameters
     ----------
     all_pair_metrics : dict
-        {(ann_a, ann_b): {'mean_iou': float, 'agreement_rate': float,
+        {(ann_a, ann_b): {'mean_iou': float, 'agreement_rate': float, 
                           'kappa': float, 'per_class_kappa': dict, 'per_file_iou': dict}}
     annotators : list
         List of annotator names, used as row and column labels.
@@ -486,14 +487,15 @@ def build_annotator_matrix(all_pair_metrics: dict, annotators: list, metric: str
         matrix.loc[ann, ann] = 1.0
 
     # Fill upper and lower triangle (symmetric matrix)
-    for (ann_a, ann_b), pair_metrics in all_pair_metrics.items():
-        value = pair_metrics[metric]
+    for (ann_a, ann_b), metrics in all_pair_metrics.items():
+        value = metrics[metric]
         matrix.loc[ann_a, ann_b] = value
-        matrix.loc[ann_b, ann_a] = value
+        matrix.loc[ann_b, ann_a] = value  # symmetric
 
     return matrix
 
 
+# %%
 def plot_annotator_matrix(matrix: pd.DataFrame, title: str, output_path: Path = None) -> None:
     """
     Displays an inter-annotator matrix as a heatmap.
@@ -545,6 +547,7 @@ def plot_annotator_matrix(matrix: pd.DataFrame, title: str, output_path: Path = 
         plt.show()
 
 
+# %%
 def plot_iou_distribution(all_pair_metrics: dict, output_path: Path = None) -> None:
     """
     Displays the distribution of IoU values per annotator pair as boxplots.
@@ -596,9 +599,9 @@ def plot_iou_distribution(all_pair_metrics: dict, output_path: Path = None) -> N
         plt.show()
 
 
+# %%
 def plot_confusion_matrix_pair(all_data: dict, mapping: dict, common_files: dict,
-                                ann_a: str, ann_b: str, iou_threshold: float = 0.5,
-                                output_path: Path = None) -> None:
+                                ann_a: str, ann_b: str, iou_threshold: float = 0.5, output_path: Path = None) -> None:
     """
     Displays the confusion matrix of classes for a pair of annotators.
 
@@ -672,8 +675,6 @@ def plot_confusion_matrix_pair(all_data: dict, mapping: dict, common_files: dict
     ax.set_ylabel(ann_a)
     ax.set_xlabel(ann_b)
 
-    plt.tight_layout()
-
     if output_path is None:
         plt.show()
     else:
@@ -681,10 +682,12 @@ def plot_confusion_matrix_pair(all_data: dict, mapping: dict, common_files: dict
         plt.show()
 
 
-# ============================================================
-# 4. SYNTHETIC REPORT
-# ============================================================
+# %% [markdown]
+# # ============================================================
+# # 4. RAPPORT SYNTHÉTIQUE
+# # ============================================================
 
+# %%
 def get_problematic_classes(all_pair_metrics: dict, kappa_threshold: float = 0.6) -> pd.DataFrame:
     """
     Identifies classes with a mean Cohen Kappa below the threshold across all pairs.
@@ -709,8 +712,8 @@ def get_problematic_classes(all_pair_metrics: dict, kappa_threshold: float = 0.6
     # Collect kappa values per class across all pairs
     class_kappas = {}
 
-    for (ann_a, ann_b), pair_metrics in all_pair_metrics.items():
-        for class_name, kappa in pair_metrics['per_class_kappa'].items():
+    for (ann_a, ann_b), metrics in all_pair_metrics.items():
+        for class_name, kappa in metrics['per_class_kappa'].items():
             if class_name not in class_kappas:
                 class_kappas[class_name] = []
             class_kappas[class_name].append(kappa)
@@ -735,6 +738,7 @@ def get_problematic_classes(all_pair_metrics: dict, kappa_threshold: float = 0.6
     return df.sort_values('mean_kappa').reset_index(drop=True)
 
 
+# %%
 def get_divergent_pairs(all_pair_metrics: dict, iou_threshold: float = 0.5) -> pd.DataFrame:
     """
     Identifies annotator pairs with a mean IoU below the threshold.
@@ -758,13 +762,13 @@ def get_divergent_pairs(all_pair_metrics: dict, iou_threshold: float = 0.5) -> p
     """
     rows = []
 
-    for (ann_a, ann_b), pair_metrics in all_pair_metrics.items():
-        if pair_metrics['mean_iou'] < iou_threshold:
+    for (ann_a, ann_b), metrics in all_pair_metrics.items():
+        if metrics['mean_iou'] < iou_threshold:
             rows.append({
                 'pair': f'{ann_a} vs {ann_b}',
-                'mean_iou': round(pair_metrics['mean_iou'], 3),
-                'agreement_rate': round(pair_metrics['agreement_rate'], 3),
-                'kappa': round(pair_metrics['kappa'], 3)
+                'mean_iou': round(metrics['mean_iou'], 3),
+                'agreement_rate': round(metrics['agreement_rate'], 3),
+                'kappa': round(metrics['kappa'], 3)
             })
 
     df = pd.DataFrame(rows)
@@ -775,11 +779,12 @@ def get_divergent_pairs(all_pair_metrics: dict, iou_threshold: float = 0.5) -> p
     return df.sort_values('mean_iou').reset_index(drop=True)
 
 
+# %%
 def generate_report(annotators: list, all_pair_metrics: dict,
                     iou_threshold: float = 0.5, kappa_threshold: float = 0.6) -> None:
     """
-    Generates a synthetic text report summarizing inter-annotator agreement
-    and ontology robustness.
+    Generates a synthetic text report in the notebook summarizing
+    inter-annotator agreement and ontology robustness.
 
     Parameters
     ----------
@@ -846,12 +851,13 @@ def generate_report(annotators: list, all_pair_metrics: dict,
     print("\n" + "=" * 60)
 
 
-# ============================================================
-# 5. MAIN PIPELINE
-# ============================================================
+# %% [markdown]
+# # ============================================================
+# # 5. PIPELINE PRINCIPAL
+# # ============================================================
 
-def run_eval_ontologie(eval_folder: str, output_folder: str = None,
-                       iou_threshold: float = 0.5, kappa_threshold: float = 0.6) -> None:
+# %%
+def run_eval_ontologie(eval_folder: str, output_folder: str = None, iou_threshold: float = 0.5, kappa_threshold: float = 0.6) -> None:
     """
     Full pipeline : scan → load → harmonize → metrics → visualizations → report.
 
@@ -923,48 +929,8 @@ def run_eval_ontologie(eval_folder: str, output_folder: str = None,
     generate_report(annotators, all_pair_metrics, iou_threshold, kappa_threshold)
 
 
-# ============================================================
-# 6. ENTRY POINT
-# ============================================================
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate the robustness of a computer vision ontology "
-                    "by computing inter-annotator agreement metrics.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-
-    parser.add_argument(
-        "--eval_folder",
-        type=str,
-        required=True,
-        help="Path to the root evaluation folder containing one subfolder per annotator."
-    )
-    parser.add_argument(
-        "--output_folder",
-        type=str,
-        default=None,
-        help="Path to the folder where figures will be saved. "
-             "If not provided, figures are only displayed."
-    )
-    parser.add_argument(
-        "--iou_threshold",
-        type=float,
-        default=0.5,
-        help="Minimum IoU to consider a bounding box match valid."
-    )
-    parser.add_argument(
-        "--kappa_threshold",
-        type=float,
-        default=0.6,
-        help="Cohen Kappa below which a class is considered problematic."
-    )
-
-    args = parser.parse_args()
-
-    run_eval_ontologie(
-        eval_folder=args.eval_folder,
-        output_folder=args.output_folder,
-        iou_threshold=args.iou_threshold,
-        kappa_threshold=args.kappa_threshold
-    )
+# %%
+run_eval_ontologie('', #YOURDATAFOLDER
+                    output_folder='', #YOUROUTPUTFOLDER
+                    iou_threshold = 0.5, 
+                    kappa_threshold = 0.6)
